@@ -79,5 +79,3 @@ npm run pack:mac
 MIT License
 
 ---
-
-🤖 由 [Claude Code](https://claude.ai/code) 辅助开发
