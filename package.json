@@ -1,0 +1,58 @@
+{
+  "name": "lime-accounting",
+  "version": "1.0.0",
+  "description": "青柠记账 — 个人桌面记账工具",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "pack:win": "electron-builder --win",
+    "pack:mac": "electron-builder --mac"
+  },
+  "keywords": [
+    "记账",
+    "桌面应用",
+    "Electron"
+  ],
+  "author": "青柠记账",
+  "license": "MIT",
+  "dependencies": {
+    "@ant-design/icons": "^6.3.2",
+    "antd": "^6.5.0",
+    "dayjs": "^1.11.21",
+    "electron": "^31.7.7",
+    "electron-vite": "^5.0.0",
+    "mysql2": "^3.22.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
+  },
+  "build": {
+    "appId": "com.lime.accounting",
+    "productName": "青柠记账",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "language": "2052"
+    }
+  }
+}

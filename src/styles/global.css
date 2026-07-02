@@ -1,0 +1,46 @@
+/**
+ * 全局样式
+ * 青柠记账 — 简洁清新的设计风格
+ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  background-color: #f5f7fa;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 青柠主题色 */
+:root {
+  --primary-color: #7ed321;      /* 青柠绿 */
+  --primary-light: #a8e66c;      /* 浅青柠 */
+  --primary-dark: #5fa319;       /* 深青柠 */
+  --danger-color: #ff4d4f;       /* 红色（支出） */
+  --success-color: #52c41a;      /* 绿色（收入） */
+  --bg-color: #f5f7fa;
+  --card-bg: #ffffff;
+  --border-color: #e8e8e8;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}

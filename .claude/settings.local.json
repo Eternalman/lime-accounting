@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx electron-vite *)",
+      "Bash(npx electron *)"
+    ]
+  }
+}
