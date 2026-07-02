@@ -14,6 +14,9 @@ release/
 # 环境变量
 .env
 
+# Claude 内部文件
+.claude/
+
 # 系统文件
 .DS_Store
 Thumbs.db
