@@ -11,6 +11,9 @@
  * 重要安全提示：密码不允许在代码中提供默认值，请在项目根目录创建 .env 文件配置密码
  */
 
+// 加载 .env 文件到 process.env（app 启动时自动执行）
+import 'dotenv/config'
+
 // 数据库连接配置 — 优先使用环境变量，回退到默认值（向后兼容）
 const dbConfig = {
   host: process.env['DB_HOST'] || 'localhost',

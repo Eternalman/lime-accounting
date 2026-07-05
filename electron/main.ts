@@ -10,7 +10,8 @@
 
 const electron = require('electron')
 const path = require('path')
-const { query, testConnection, initSchema, closePool } = require('./database')
+// 本地模块使用 ES import（electron-vite/rollup 会将其打入 bundle）
+import { query, testConnection, initSchema, closePool } from './database'
 // 类型导入（仅用于编译时类型检查，不产生运行时代码）
 import type { ResultSetHeader } from 'mysql2/promise'
 import type { IpcMainInvokeEvent, Event as ElectronEvent } from 'electron'
