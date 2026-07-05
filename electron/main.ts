@@ -11,6 +11,9 @@
 const electron = require('electron')
 const path = require('path')
 const { query, testConnection, initSchema, closePool } = require('./database')
+// 类型导入（仅用于编译时类型检查，不产生运行时代码）
+import type { ResultSetHeader } from 'mysql2/promise'
+import type { IpcMainInvokeEvent, Event as ElectronEvent } from 'electron'
 
 const { app, BrowserWindow, ipcMain } = electron
 
@@ -19,15 +22,26 @@ const { app, BrowserWindow, ipcMain } = electron
 /**
  * 统一封装 IPC handler 注册
  * 所有 handler 返回 { success: true, data } 或 { success: false, error: "消息" } 统一格式
- * 错误信息直接透传（由各 handler 自行抛出对用户友好的中文错误消息）
+ *
+ * 安全说明：
+ *   handler 抛出的 Error 消息分为两类：
+ *   - 业务校验错误（如"分类下有记录无法删除"）：直接显示给用户
+ *   - 系统/数据库底层错误（err.code 存在）：替换为通用提示，避免泄露表名、字段名等内部信息
  */
 function handle(channel: string, handler: (...args: any[]) => Promise<any>) {
-  ipcMain.handle(channel, async (_event: any, ...args: any[]) => {
+  ipcMain.handle(channel, async (_event: IpcMainInvokeEvent, ...args: any[]) => {
     try {
       return { success: true, data: await handler(...args) }
-    } catch (err: any) {
-      console.error(`[${channel}] 出错:`, err)
-      return { success: false, error: err.message || '未知错误' }
+    } catch (err: unknown) {
+      // 完整错误记录到控制台，便于开发者排查
+      const error = err as Error & { code?: string }
+      console.error(`[${channel}] 出错:`, error)
+      // 有 err.code 说明是 MySQL 底层错误，用通用提示替换，防止泄露数据库结构
+      if (error.code) {
+        return { success: false, error: '操作失败，请稍后重试' }
+      }
+      // 无 err.code 说明是 handler 自行抛出的业务错误（如图层校验），可以安全显示
+      return { success: false, error: error.message || '未知错误' }
     }
   })
 }
@@ -37,10 +51,14 @@ function handle(channel: string, handler: (...args: any[]) => Promise<any>) {
 handle('db:getCategories', () =>
   query('SELECT id, name, icon, parent_id AS parentId, sort_order AS sortOrder, is_default AS isDefault FROM categories ORDER BY sort_order'))
 
-handle('db:addCategory', (cat: any) =>
-  query('INSERT INTO categories (name, icon, parent_id, sort_order) VALUES (?, ?, ?, 99)',
-    [cat.name, cat.icon || '', cat.parentId || null])
-    .then((r: any) => ({ id: r.insertId })))
+handle('db:addCategory', (cat: any) => {
+  if (!cat.name || !cat.name.trim()) {
+    throw new Error('分类名称不能为空')
+  }
+  return query('INSERT INTO categories (name, icon, parent_id, sort_order) VALUES (?, ?, ?, 99)',
+    [cat.name.trim(), cat.icon || '', cat.parentId || null])
+    .then((r: ResultSetHeader) => ({ id: r.insertId }))
+})
 
 handle('db:updateCategory', (cat: any) =>
   query('UPDATE categories SET name=?, icon=? WHERE id=?',
@@ -54,8 +72,8 @@ handle('db:deleteCategory', async (id: number) => {
     throw new Error('该分类下有' + cnt[0].cnt + '条记账记录，请先删除相关记录或将其移至其他分类')
   }
   // 安全检查2：检查子分类是否有关联记录（逐一检查，给出具体分类名）
-  const children = await query('SELECT id, name FROM categories WHERE parent_id=?', [id])
-  for (const child of children as any[]) {
+  const children = await query('SELECT id, name FROM categories WHERE parent_id=?', [id]) as { id: number; name: string }[]
+  for (const child of children) {
     const childCnt = await query('SELECT COUNT(*) AS cnt FROM records WHERE category_id=?', [child.id])
     if (childCnt[0].cnt > 0) {
       throw new Error('子分类"' + child.name + '"下有' + childCnt[0].cnt + '条记录，请先处理')
@@ -67,15 +85,33 @@ handle('db:deleteCategory', async (id: number) => {
 
 // ---- 记账记录 CRUD ----
 
-handle('db:addRecord', (record: any) =>
-  query('INSERT INTO records (type, amount, category_id, record_date, note) VALUES (?, ?, ?, ?, ?)',
+handle('db:addRecord', (record: any) => {
+  // 后端输入校验（防止绕过前端直接调用 IPC 提交恶意数据）
+  if (!['expense', 'income'].includes(record.type)) {
+    throw new Error('记账类型无效')
+  }
+  if (!record.amount || record.amount <= 0 || record.amount > 99999999) {
+    throw new Error('金额无效或超出范围')
+  }
+  if (!record.categoryId) {
+    throw new Error('请选择分类')
+  }
+  // 日期格式校验：YYYY-MM-DD
+  if (!record.recordDate || !/^\d{4}-\d{2}-\d{2}$/.test(record.recordDate)) {
+    throw new Error('日期格式无效')
+  }
+  if (record.note && record.note.length > 200) {
+    throw new Error('备注不能超过200个字符')
+  }
+  return query('INSERT INTO records (type, amount, category_id, record_date, note) VALUES (?, ?, ?, ?, ?)',
     [record.type, record.amount, record.categoryId, record.recordDate, record.note || ''])
-    .then((r: any) => ({ id: r.insertId })))
+    .then((r: ResultSetHeader) => ({ id: r.insertId }))
+})
 
 handle('db:getRecords', (filters: any) => {
   // WHERE 1=1 为后续动态拼接 AND 条件提供统一语法前缀
   let sql = 'SELECT r.*, c.name AS category_name, c.icon AS category_icon, p.name AS parent_name, p.icon AS parent_icon FROM records r JOIN categories c ON r.category_id=c.id LEFT JOIN categories p ON c.parent_id=p.id WHERE 1=1'
-  const params: any[] = []
+  const params: (string | number | null)[] = []
   if (filters.startDate) { sql += ' AND r.record_date >= ?'; params.push(filters.startDate) }
   if (filters.endDate)   { sql += ' AND r.record_date <= ?'; params.push(filters.endDate) }
   if (filters.type)      { sql += ' AND r.type = ?'; params.push(filters.type) }
@@ -92,14 +128,21 @@ handle('db:deleteRecord', (id: number) =>
 
 handle('db:getBudget', (year: number, month: number) =>
   query('SELECT * FROM budgets WHERE year=? AND month=?', [year, month])
-    .then((rows: any) => rows[0] || null))
+    .then((rows: Record<string, unknown>[]) => rows[0] || null))
 
 // ON DUPLICATE KEY UPDATE 实现"存在则更新、不存在则插入"的 upsert 语义
 // 依赖 budgets 表的 UNIQUE KEY uk_year_month (year, month)
-handle('db:setBudget', (budget: any) =>
-  query('INSERT INTO budgets (year, month, amount) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE amount=?, updated_at=CURRENT_TIMESTAMP',
+handle('db:setBudget', (budget: any) => {
+  if (!budget.year || !budget.month) {
+    throw new Error('年月参数无效')
+  }
+  if (!budget.amount || budget.amount <= 0 || budget.amount > 99999999) {
+    throw new Error('预算金额无效或超出范围')
+  }
+  return query('INSERT INTO budgets (year, month, amount) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE amount=?, updated_at=CURRENT_TIMESTAMP',
     [budget.year, budget.month, budget.amount, budget.amount])
-    .then(() => ({ ok: true })))
+    .then(() => ({ ok: true }))
+})
 
 // ---- 月度统计 ----
 // 使用范围查询（r.record_date >= start AND r.record_date < end）
@@ -128,7 +171,7 @@ handle('db:getMonthlyStats', (year: number, month: number) => {
 // ========== 窗口管理 ==========
 
 // 模块级变量，createWindow() 和 activate 事件均可访问
-let mainWindow: any = null
+let mainWindow: InstanceType<typeof BrowserWindow> | null = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -169,7 +212,7 @@ app.on('activate', () => {
 })
 
 // 应用退出前关闭数据库连接池，释放 MySQL 连接
-app.on('before-quit', async (event: any) => {
+app.on('before-quit', async (event: ElectronEvent) => {
   event.preventDefault()  // 暂缓退出，等待连接池关闭完成
   try {
     await closePool()
@@ -192,7 +235,7 @@ app.whenReady().then(async () => {
       '请检查以下事项：\n' +
       '  1. MySQL 服务是否已启动\n' +
       '  2. 数据库 lime_accounting 是否已创建\n' +
-      '  3. 用户名和密码是否正确（默认 root / 123456）\n\n' +
+      '  3. .env 文件中的数据库连接信息是否配置正确\n\n' +
       '修复后请重新启动应用。'
     )
     app.quit()

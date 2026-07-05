@@ -2,18 +2,20 @@
  * 数据库连接模块
  * 负责连接本地 MySQL 数据库，提供查询、建表、连接管理等功能
  *
- * 环境变量配置（可选，未设置时使用默认值）：
+ * 环境变量配置（必须通过 .env 文件或系统环境变量配置）：
  *   DB_HOST     — MySQL 主机地址（默认 localhost）
  *   DB_USER     — MySQL 用户名（默认 root）
- *   DB_PASSWORD — MySQL 密码（默认 123456）
+ *   DB_PASSWORD — MySQL 密码（无默认值，必须手动配置）
  *   DB_NAME     — 数据库名称（默认 lime_accounting）
+ *
+ * 重要安全提示：密码不允许在代码中提供默认值，请在项目根目录创建 .env 文件配置密码
  */
 
 // 数据库连接配置 — 优先使用环境变量，回退到默认值（向后兼容）
 const dbConfig = {
   host: process.env['DB_HOST'] || 'localhost',
   user: process.env['DB_USER'] || 'root',
-  password: process.env['DB_PASSWORD'] || '123456',
+  password: process.env['DB_PASSWORD'] || '',
   database: process.env['DB_NAME'] || 'lime_accounting',
   charset: 'utf8mb4',
   // 关键配置：DECIMAL 返回 number 而非 string，DATE 返回 "YYYY-MM-DD" 而非 Date 对象
@@ -22,21 +24,27 @@ const dbConfig = {
   dateStrings: true
 }
 
-// 全局连接池（惰性初始化，复用连接避免反复握手）
-let pool: any = null
+// 数据库驱动（模块顶层引用，便于单元测试 mock）
+const mysql = require('mysql2/promise')
+// mysql2/promise 的类型为 PromisePool，但由于使用 require 导入，TypeScript 无法自动推断
+// 这里显式声明为 mysql2 的 Pool 类型
+import type { Pool, ResultSetHeader } from 'mysql2/promise'
 
-/** 获取数据库连接池（首次调用时自动创建） */
-export function getPool(): any {
+// 全局连接池（惰性初始化，复用连接避免反复握手）
+let pool: Pool | null = null
+
+/** 获取数据库连接池（首次调用时自动创建，确保返回非空） */
+export function getPool(): Pool {
   if (!pool) {
-    // 运行时 require 避免循环依赖；createPool 是同步操作，不会连接数据库
-    pool = require('mysql2/promise').createPool({
+    // createPool 是同步操作，不会立即连接数据库——连接在首次查询时建立
+    pool = mysql.createPool({
       ...dbConfig,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0
     })
   }
-  return pool
+  return pool!
 }
 
 /**
@@ -114,7 +122,8 @@ export async function initSchema(): Promise<void> {
 
   // 4. 如果分类表为空，插入默认分类数据
   const [rows] = await p.execute('SELECT COUNT(*) AS cnt FROM categories')
-  if (rows[0].cnt === 0) {
+  const rowData = rows as { cnt: number }[]
+  if (rowData[0].cnt === 0) {
     // 先插入一级分类，记录每个父分类的 ID
     const parents: { name: string; icon: string; sort: number }[] = [
       { name: '餐饮饮食', icon: '🍜', sort: 1 },
@@ -131,11 +140,11 @@ export async function initSchema(): Promise<void> {
 
     const parentIds: number[] = []
     for (const parent of parents) {
-      const [result] = await p.execute(
+      const [result] = await p.execute<ResultSetHeader>(
         'INSERT INTO categories (name, icon, parent_id, sort_order, is_default) VALUES (?, ?, NULL, ?, 1)',
         [parent.name, parent.icon, parent.sort]
       )
-      parentIds.push((result as any).insertId)
+      parentIds.push(result.insertId)
     }
 
     // 二级分类数据：[名称, 父分类索引]

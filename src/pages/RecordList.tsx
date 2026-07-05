@@ -8,6 +8,8 @@ import { App, Table, Select, Tag, Popconfirm, Empty, Tabs } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Category, RecordItem } from '../types'
+import { useMonthOptions } from '../hooks/useMonthOptions'
+import { formatCurrency } from '../utils/format'
 
 interface Props {
   categories: Category[]
@@ -45,24 +47,22 @@ const RecordList: React.FC<Props> = ({ categories, initialFilter }) => {
 
   /** 删除记录 */
   const handleDelete = async (id: number) => {
-    const res = await window.api.deleteRecord(id)
-    if (res.success) {
-      message.success('已删除')
-      loadRecords()
-    } else {
-      message.error('删除失败')
+    try {
+      const res = await window.api.deleteRecord(id)
+      if (res.success) {
+        message.success('已删除')
+        loadRecords()
+      } else {
+        message.error(res.error || '删除失败')
+      }
+    } catch (err: any) {
+      console.error('删除记录失败:', err)
+      message.error('删除失败: ' + (err.message || '未知错误'))
     }
   }
 
-  /** 生成本月月份列表 */
-  const monthOptions = useMemo(() => {
-    const options = []
-    for (let i = 0; i < 12; i++) {
-      const d = dayjs().subtract(i, 'month')
-      options.push({ label: d.format('YYYY年M月'), value: d.format('YYYY-MM') })
-    }
-    return options
-  }, [])
+  /** 生成本月月份列表（使用共享 Hook） */
+  const monthOptions = useMonthOptions()
 
   /** 当月汇总 */
   const summary = useMemo(() => {
@@ -96,7 +96,7 @@ const RecordList: React.FC<Props> = ({ categories, initialFilter }) => {
           <span style={{
             color: r.type === 'expense' ? '#ff4d4f' : '#52c41a', fontWeight: 600, fontSize: 16
           }}>
-            {r.type === 'expense' ? '-' : '+'}¥{Number(amt).toFixed(2)}
+            {r.type === 'expense' ? '-' : '+'}{formatCurrency(Number(amt))}
           </span>
       )
     },
@@ -147,11 +147,11 @@ const RecordList: React.FC<Props> = ({ categories, initialFilter }) => {
       }}>
         <div>
           <span style={{ color: '#999' }}>支出：</span>
-          <span style={{ color: '#ff4d4f', fontWeight: 600, fontSize: 16 }}>¥{summary.expense.toFixed(2)}</span>
+          <span style={{ color: '#ff4d4f', fontWeight: 600, fontSize: 16 }}>{formatCurrency(summary.expense)}</span>
         </div>
         <div>
           <span style={{ color: '#999' }}>收入：</span>
-          <span style={{ color: '#52c41a', fontWeight: 600, fontSize: 16 }}>¥{summary.income.toFixed(2)}</span>
+          <span style={{ color: '#52c41a', fontWeight: 600, fontSize: 16 }}>{formatCurrency(summary.income)}</span>
         </div>
         <div>
           <span style={{ color: '#999' }}>结余：</span>
@@ -159,7 +159,7 @@ const RecordList: React.FC<Props> = ({ categories, initialFilter }) => {
             color: summary.balance >= 0 ? '#52c41a' : '#ff4d4f',
             fontWeight: 600, fontSize: 16
           }}>
-            ¥{summary.balance.toFixed(2)}
+            {formatCurrency(summary.balance)}
           </span>
         </div>
       </div>

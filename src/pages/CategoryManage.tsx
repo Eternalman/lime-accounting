@@ -4,7 +4,7 @@
  * 系统默认分类不可删除
  */
 import React, { useState, useMemo } from 'react'
-import { Button, Modal, Input, Popconfirm, message, Empty, Tag, Tabs } from 'antd'
+import { Button, Modal, Input, message, Tag, Tabs } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { Category } from '../types'
 
@@ -55,30 +55,41 @@ const CategoryManage: React.FC<Props> = ({ categories, onChanged }) => {
       return
     }
     setSaving(true)
-    let res
-    if (editId) {
-      res = await window.api.updateCategory({ id: editId, name: name.trim(), icon: icon.trim() })
-    } else {
-      res = await window.api.addCategory({ name: name.trim(), icon: icon.trim(), parentId })
-    }
-    setSaving(false)
-    if (res.success) {
-      message.success(editId ? '修改成功' : '添加成功')
-      setModalOpen(false)
-      onChanged()
-    } else {
-      message.error(res.error || '操作失败')
+    try {
+      let res
+      if (editId) {
+        res = await window.api.updateCategory({ id: editId, name: name.trim(), icon: icon.trim() })
+      } else {
+        res = await window.api.addCategory({ name: name.trim(), icon: icon.trim(), parentId: parentId ?? undefined })
+      }
+      if (res.success) {
+        message.success(editId ? '修改成功' : '添加成功')
+        setModalOpen(false)
+        onChanged()
+      } else {
+        message.error(res.error || '操作失败')
+      }
+    } catch (err: any) {
+      console.error('保存分类失败:', err)
+      message.error('保存失败: ' + (err.message || '未知错误'))
+    } finally {
+      setSaving(false)
     }
   }
 
   /** 删除分类 */
   const handleDelete = async (id: number) => {
-    const res = await window.api.deleteCategory(id)
-    if (res.success) {
-      message.success('已删除')
-      onChanged()
-    } else {
-      message.error(res.error || '删除失败（系统默认分类不可删除）')
+    try {
+      const res = await window.api.deleteCategory(id)
+      if (res.success) {
+        message.success('已删除')
+        onChanged()
+      } else {
+        message.error(res.error || '删除失败（系统默认分类不可删除）')
+      }
+    } catch (err: any) {
+      console.error('删除分类失败:', err)
+      message.error('删除失败: ' + (err.message || '未知错误'))
     }
   }
 

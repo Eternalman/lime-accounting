@@ -7,6 +7,8 @@ import { App, Select, InputNumber, Button, Progress, Spin } from 'antd'
 import { EditOutlined, CheckOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { MonthlyStat } from '../types'
+import { useMonthOptions } from '../hooks/useMonthOptions'
+import { formatCurrency } from '../utils/format'
 
 const Budget: React.FC = () => {
   const { message } = App.useApp()
@@ -21,18 +23,24 @@ const Budget: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const [y, m] = month.split('-').map(Number)
-      const [budgetRes, statsRes] = await Promise.all([
-        window.api.getBudget(y, m),
-        window.api.getMonthlyStats(y, m)
-      ])
-      if (budgetRes.success && budgetRes.data) {
-        setBudget(Number(budgetRes.data.amount))
-      } else {
-        setBudget(null)
+      try {
+        const [y, m] = month.split('-').map(Number)
+        const [budgetRes, statsRes] = await Promise.all([
+          window.api.getBudget(y, m),
+          window.api.getMonthlyStats(y, m)
+        ])
+        if (budgetRes.success && budgetRes.data) {
+          setBudget(Number(budgetRes.data.amount))
+        } else {
+          setBudget(null)
+        }
+        if (statsRes.success) setStats(statsRes.data!)
+      } catch (err: any) {
+        console.error('加载预算数据失败:', err)
+        message.error('加载数据失败: ' + (err.message || '未知错误'))
+      } finally {
+        setLoading(false)
       }
-      if (statsRes.success) setStats(statsRes.data!)
-      setLoading(false)
     }
     load()
   }, [month])
@@ -53,25 +61,23 @@ const Budget: React.FC = () => {
       message.warning('请输入有效的预算金额')
       return
     }
-    const [y, m] = month.split('-').map(Number)
-    const res = await window.api.setBudget({ year: y, month: m, amount: editValue })
-    if (res.success) {
-      setBudget(editValue)
-      setEditing(false)
-      message.success('预算已设置')
-    } else {
-      message.error('保存失败')
+    try {
+      const [y, m] = month.split('-').map(Number)
+      const res = await window.api.setBudget({ year: y, month: m, amount: editValue })
+      if (res.success) {
+        setBudget(editValue)
+        setEditing(false)
+        message.success('预算已设置')
+      } else {
+        message.error(res.error || '保存失败')
+      }
+    } catch (err: any) {
+      console.error('保存预算失败:', err)
+      message.error('保存失败: ' + (err.message || '未知错误'))
     }
   }
 
-  const monthOptions = useMemo(() => {
-    const opts = []
-    for (let i = 0; i < 12; i++) {
-      const d = dayjs().subtract(i, 'month')
-      opts.push({ label: d.format('YYYY年M月'), value: d.format('YYYY-MM') })
-    }
-    return opts
-  }, [])
+  const monthOptions = useMonthOptions()
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -116,7 +122,7 @@ const Budget: React.FC = () => {
             ) : (
               <div>
                 <div style={{ fontSize: 36, fontWeight: 700, color: isOverBudget ? '#ff4d4f' : '#333' }}>
-                  ¥ {(budget || 0).toFixed(2)}
+                  {formatCurrency(budget || 0)}
                 </div>
                 <Button
                   type="link"
@@ -150,7 +156,7 @@ const Budget: React.FC = () => {
               <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 32 }}>
                 <div>
                   <div style={{ color: '#999', fontSize: 12 }}>已支出</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: '#ff4d4f' }}>¥{totalExpense.toFixed(2)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: '#ff4d4f' }}>{formatCurrency(totalExpense)}</div>
                 </div>
                 <div>
                   <div style={{ color: '#999', fontSize: 12 }}>预算余额</div>
@@ -158,7 +164,7 @@ const Budget: React.FC = () => {
                     fontSize: 18, fontWeight: 600,
                     color: isOverBudget ? '#ff4d4f' : '#52c41a'
                   }}>
-                    ¥{(budget - totalExpense).toFixed(2)}
+                    {formatCurrency(budget - totalExpense)}
                   </div>
                 </div>
               </div>
@@ -171,7 +177,7 @@ const Budget: React.FC = () => {
                   color: '#ff4d4f',
                   fontWeight: 500
                 }}>
-                  ⚠️ 本月已超支 ¥{(totalExpense - budget).toFixed(2)}，请注意控制花销！
+                  ⚠️ 本月已超支 {formatCurrency(totalExpense - budget)}，请注意控制花销！
                 </div>
               )}
             </div>

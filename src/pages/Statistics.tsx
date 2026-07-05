@@ -6,6 +6,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Select, Empty, Spin } from 'antd'
 import dayjs from 'dayjs'
 import type { Category, MonthlyStat } from '../types'
+import { useMonthOptions } from '../hooks/useMonthOptions'
+import { formatCurrency } from '../utils/format'
 
 interface Props {
   categories: Category[]
@@ -19,10 +21,15 @@ const Statistics: React.FC<Props> = ({ categories }) => {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const [y, m] = month.split('-').map(Number)
-      const res = await window.api.getMonthlyStats(y, m)
-      if (res.success) setStats(res.data!)
-      setLoading(false)
+      try {
+        const [y, m] = month.split('-').map(Number)
+        const res = await window.api.getMonthlyStats(y, m)
+        if (res.success) setStats(res.data!)
+      } catch (err) {
+        console.error('加载统计数据失败:', err)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [month])
@@ -35,14 +42,7 @@ const Statistics: React.FC<Props> = ({ categories }) => {
   const incomeStats = useMemo(() => stats.filter(s => s.type === 'income'), [stats])
   const totalIncome = useMemo(() => incomeStats.reduce((s, i) => s + Number(i.total), 0), [incomeStats])
 
-  const monthOptions = useMemo(() => {
-    const opts = []
-    for (let i = 0; i < 12; i++) {
-      const d = dayjs().subtract(i, 'month')
-      opts.push({ label: d.format('YYYY年M月'), value: d.format('YYYY-MM') })
-    }
-    return opts
-  }, [])
+  const monthOptions = useMonthOptions()
 
   const colors = ['#7ed321', '#5fa319', '#a8e66c', '#ff7875', '#ffa940', '#36cfc9', '#597ef7', '#b37feb', '#f759ab', '#ffc53d']
 
@@ -61,12 +61,12 @@ const Statistics: React.FC<Props> = ({ categories }) => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
           {/* 支出统计 */}
           <div>
-            <h3 style={{ marginBottom: 12, color: '#ff4d4f' }}>💸 支出：¥{totalExpense.toFixed(2)}</h3>
+            <h3 style={{ marginBottom: 12, color: '#ff4d4f' }}>💸 支出：{formatCurrency(totalExpense)}</h3>
             {expenseStats.map((s, i) => (
               <div key={s.categoryId} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span>{s.parentIcon} {s.parentName} / {s.categoryName}</span>
-                  <span style={{ fontWeight: 500 }}>¥{Number(s.total).toFixed(2)}</span>
+                  <span style={{ fontWeight: 500 }}>{formatCurrency(Number(s.total))}</span>
                 </div>
                 <div style={{ height: 8, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{
@@ -84,12 +84,12 @@ const Statistics: React.FC<Props> = ({ categories }) => {
 
           {/* 收入统计 */}
           <div>
-            <h3 style={{ marginBottom: 12, color: '#52c41a' }}>💰 收入：¥{totalIncome.toFixed(2)}</h3>
+            <h3 style={{ marginBottom: 12, color: '#52c41a' }}>💰 收入：{formatCurrency(totalIncome)}</h3>
             {incomeStats.map((s, i) => (
               <div key={s.categoryId} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span>{s.categoryName}</span>
-                  <span style={{ fontWeight: 500 }}>¥{Number(s.total).toFixed(2)}</span>
+                  <span style={{ fontWeight: 500 }}>{formatCurrency(Number(s.total))}</span>
                 </div>
                 <div style={{ height: 8, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{

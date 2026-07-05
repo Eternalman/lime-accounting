@@ -122,8 +122,13 @@ const RecordForm: React.FC<Props> = ({ categories, onRecorded }) => {
               style={{ cursor: 'pointer', color: '#7ed321' }}
               onClick={() => {
                 const today = dayjs().format('YYYY-MM-DD')
-                const input = prompt('输入日期（如 2026-07-02）：', today)
-                if (input) setRecordDate(input)
+                const input = prompt('输入日期（格式：YYYY-MM-DD，如 ' + today + '）：', today)
+                // 校验日期格式，防止非法日期存入数据库
+                if (input && /^\d{4}-\d{2}-\d{2}$/.test(input) && dayjs(input).isValid()) {
+                  setRecordDate(input)
+                } else if (input) {
+                  message.warning('日期格式不正确，请输入如 ' + today + ' 的格式')
+                }
               }}
             >
               {recordDate} 📅
